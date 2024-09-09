@@ -1,0 +1,56 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Photo {
+  id  String @id @default(uuid()) @db.Uuid
+  url String @db.VarChar
+
+  Drink   Drink[] @relation("photosRelation")
+}
+
+model Category {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @db.VarChar
+
+  Drink Drink[] @relation("categoryRelation")
+}
+
+model Price {
+  id     String  @id @default(uuid()) @db.Uuid
+  amount Decimal @db.Decimal(10, 2)
+
+  Drink   Drink[] @relation("pricesRelation")
+}
+
+model Drink {
+  id                    String   @id @default(uuid()) @db.Uuid
+  name                  String   @db.VarChar
+  description           String?  @db.VarChar
+  isActive              Boolean  @default(true)
+  categoryId            String?  @db.Uuid
+  pricesId              String?  @db.Uuid
+  photosId              String?  @db.Uuid
+  availableDays_sunday  Boolean  @default(false)
+  availableDays_monday  Boolean  @default(false)
+  availableDays_tuesday Boolean  @default(false)
+  availableDays_wednesday Boolean @default(false)
+  availableDays_thursday Boolean @default(false)
+  availableDays_friday   Boolean @default(false)
+  availableDays_saturday Boolean @default(false)
+
+  category  Category? @relation("categoryRelation", fields: [categoryId], references: [id])
+  price     Price?    @relation("pricesRelation", fields: [pricesId], references: [id])
+  photo     Photo?    @relation("photosRelation", fields: [photosId], references: [id])
+}
