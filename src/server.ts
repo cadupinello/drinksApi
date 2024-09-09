@@ -1,4 +1,4 @@
-import fastify, { FastifyRequest } from "fastify";
+import fastify, { FastifyReply, FastifyRequest } from "fastify";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
@@ -6,21 +6,71 @@ const app = fastify();
 
 const prisma = new PrismaClient();
 
-app.get("/drinks", async () => {
-  const drinks = await prisma.drink.findMany();
-
-  return drinks;
+app.addHook('onClose', async () => {
+  await prisma.$disconnect();
 })
 
-app.get("/drinks/:id", async (request: FastifyRequest<{ Params: { id: string } }>) => {
-  const { id } = request.params;
-  const drink = await prisma.drink.findUnique({
-    where: {
-      id: id,
-    },
-  });
+app.get("/drinks", async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const { category, page = '1', limit = '10' } = request.query as {
+      category?: string;
+      page?: string;
+      limit?: string;
+    };
 
-  return drink;
+    const drinks = await prisma.drink.findMany({
+      where: {
+        category: {
+          name: category,
+        },
+      },
+      skip: page ? (Number(page) - 1) * Number(limit) : undefined,
+      take: limit ? Number(limit) : undefined,
+    });
+
+
+    const totalDrinks = await prisma.drink.count();
+    const totalPages = Math.ceil(totalDrinks / Number(limit));
+
+    reply.send({
+      data: drinks,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        totalDrinks,
+        totalPages
+      }
+    });
+  } catch (err) {
+    reply.status(500).send({
+      message: 'Erro ao consultar os drinks',
+      err
+    });
+  }
+})
+
+app.get("/drinks/:id", async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  try {
+    const { id } = request.params;
+    const drink = await prisma.drink.findUnique({
+      where: {
+        id: id,
+      },
+    });
+
+    if (!drink) {
+      return reply.status(404).send({
+        message: 'Drink não encontrado',
+      })
+    }
+
+    reply.status(200).send(drink);
+  } catch (err) {
+    reply.status(500).send({
+      message: 'Erro ao consultar o drink',
+      err
+    });
+  }
 })
 
 app.post("/drinks", async (request, reply) => {

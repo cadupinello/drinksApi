@@ -28,18 +28,59 @@ var import_client = require("@prisma/client");
 var import_zod = require("zod");
 var app = (0, import_fastify.default)();
 var prisma = new import_client.PrismaClient();
-app.get("/drinks", async () => {
-  const drinks = await prisma.drink.findMany();
-  return drinks;
+app.addHook("onClose", async () => {
+  await prisma.$disconnect();
 });
-app.get("/drinks/:id", async (request) => {
-  const { id } = request.params;
-  const drink = await prisma.drink.findUnique({
-    where: {
-      id
+app.get("/drinks", async (request, reply) => {
+  try {
+    const { category, page = "1", limit = "10" } = request.query;
+    const drinks = await prisma.drink.findMany({
+      where: {
+        category: {
+          name: category
+        }
+      },
+      skip: page ? (Number(page) - 1) * Number(limit) : void 0,
+      take: limit ? Number(limit) : void 0
+    });
+    const totalDrinks = await prisma.drink.count();
+    const totalPages = Math.ceil(totalDrinks / Number(limit));
+    reply.send({
+      data: drinks,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        totalDrinks,
+        totalPages
+      }
+    });
+  } catch (err) {
+    reply.status(500).send({
+      message: "Erro ao consultar os drinks",
+      err
+    });
+  }
+});
+app.get("/drinks/:id", async (request, reply) => {
+  try {
+    const { id } = request.params;
+    const drink = await prisma.drink.findUnique({
+      where: {
+        id
+      }
+    });
+    if (!drink) {
+      return reply.status(404).send({
+        message: "Drink na\u0303o encontrado"
+      });
     }
-  });
-  return drink;
+    reply.status(200).send(drink);
+  } catch (err) {
+    reply.status(500).send({
+      message: "Erro ao consultar o drink",
+      err
+    });
+  }
 });
 app.post("/drinks", async (request, reply) => {
   const createDrinkSchema = import_zod.z.object({
