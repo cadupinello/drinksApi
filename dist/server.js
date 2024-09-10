@@ -26,27 +26,58 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_fastify = __toESM(require("fastify"));
 var import_client = require("@prisma/client");
 var import_zod = require("zod");
+var import_cors = __toESM(require("@fastify/cors"));
 var app = (0, import_fastify.default)();
+app.register(import_cors.default, {
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization", "Origin", "Accept"]
+});
 var prisma = new import_client.PrismaClient();
 app.addHook("onClose", async () => {
   await prisma.$disconnect();
 });
 app.get("/drinks", async (request, reply) => {
   try {
-    const { category, page = "1", limit = "10" } = request.query;
+    const { category = "", page = "1", limit = "10" } = request.query;
     const drinks = await prisma.drink.findMany({
       where: {
         category: {
-          name: category
+          name: {
+            contains: category,
+            mode: "insensitive"
+          }
         }
+      },
+      include: {
+        category: true,
+        price: true,
+        photo: true
       },
       skip: page ? (Number(page) - 1) * Number(limit) : void 0,
       take: limit ? Number(limit) : void 0
     });
-    const totalDrinks = await prisma.drink.count();
+    const totalDrinks = await prisma.drink.count({
+      where: {
+        category: {
+          name: {
+            contains: category,
+            mode: "insensitive"
+          }
+        }
+      }
+    });
     const totalPages = Math.ceil(totalDrinks / Number(limit));
     reply.send({
-      data: drinks,
+      data: drinks.map((drink) => ({
+        id: drink.id,
+        name: drink.name,
+        description: drink.description,
+        category: drink?.category?.name,
+        photo: drink?.photo?.url,
+        price: drink?.price?.amount
+      })),
       pagination: {
         page: Number(page),
         limit: Number(limit),

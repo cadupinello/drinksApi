@@ -1,8 +1,16 @@
 import fastify, { FastifyReply, FastifyRequest } from "fastify";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import cors from "@fastify/cors";
 
 const app = fastify();
+
+app.register(cors, {
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization", "Origin", "Accept"],
+});
 
 const prisma = new PrismaClient();
 
@@ -12,7 +20,7 @@ app.addHook('onClose', async () => {
 
 app.get("/drinks", async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    const { category, page = '1', limit = '10' } = request.query as {
+    const { category = '', page = '1', limit = '10' } = request.query as {
       category?: string;
       page?: string;
       limit?: string;
@@ -21,19 +29,42 @@ app.get("/drinks", async (request: FastifyRequest, reply: FastifyReply) => {
     const drinks = await prisma.drink.findMany({
       where: {
         category: {
-          name: category,
+          name: {
+            contains: category,
+            mode: 'insensitive'
+          },
         },
+      },
+      include: {
+        category: true,
+        price: true,
+        photo: true,
       },
       skip: page ? (Number(page) - 1) * Number(limit) : undefined,
       take: limit ? Number(limit) : undefined,
     });
 
-
-    const totalDrinks = await prisma.drink.count();
+    const totalDrinks = await prisma.drink.count({
+      where: {
+        category: {
+          name: {
+            contains: category,
+            mode: 'insensitive'
+          },
+        },
+      },
+    });
     const totalPages = Math.ceil(totalDrinks / Number(limit));
 
     reply.send({
-      data: drinks,
+      data: drinks.map(drink => ({
+        id: drink.id,
+        name: drink.name,
+        description: drink.description,
+        category: drink?.category?.name,
+        photo: drink?.photo?.url,    
+        price: drink?.price?.amount,
+      })),
       pagination: {
         page: Number(page),
         limit: Number(limit),
